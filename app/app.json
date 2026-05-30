@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "SektorRun",
+    "slug": "sektorrun",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "package": "com.sektorrun.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sektorrun.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SektorRun needs your location to track your run and capture territories.",
+        "NSLocationAlwaysUsageDescription": "SektorRun tracks your location in the background so your run is not lost if you switch apps.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SektorRun needs background location access to keep tracking your run."
+      }
+    },
+    "plugins": [
+      "expo-location",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#00FF88"
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID_HERE"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "FILL_IN_AFTER_EAS_LOGIN"
+      }
+    }
+  }
+}

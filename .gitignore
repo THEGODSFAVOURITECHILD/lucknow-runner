@@ -1,0 +1,33 @@
+# ─── Secrets — NEVER commit these ───────────────────────────────────────────
+.env
+*.env
+.env.local
+.env.production
+
+# Google Sign-In credentials
+google-services.json
+GoogleService-Info.plist
+
+# ─── Node ────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Expo / React Native ─────────────────────────────────────────────────────
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# ─── OS files ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── EAS ─────────────────────────────────────────────────────────────────────
+.easignore

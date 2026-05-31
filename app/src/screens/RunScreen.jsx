@@ -143,7 +143,10 @@ export default function RunScreen() {
   // GPS callback — stable (no deps), reads all live values via refs
   // ─────────────────────────────────────────────────────────────────────────────
   const onNewLocation = useCallback((pos) => {
-    const { latitude, longitude, accuracy } = pos.coords;
+    const { latitude, longitude, accuracy, speed } = pos.coords;
+
+const deviceSpeedKmh =
+  typeof speed === 'number' && speed >= 0 ? speed * 3.6 : null;
     const timestamp = pos.timestamp || Date.now();
     const newCoord  = { latitude, longitude };
 
@@ -159,20 +162,30 @@ export default function RunScreen() {
     // ── Speed and distance ────────────────────────────────────────────────────
     let segmentKm      = 0;
     let segmentSpeedKmh = 0;
+let finalSpeedKmh = deviceSpeedKmh ?? 0;
 
     if (lastPointRef.current && lastPointTimeRef.current) {
       segmentKm       = haversineKm(lastPointRef.current.latitude, lastPointRef.current.longitude, latitude, longitude);
-      segmentSpeedKmh = calcSegmentSpeedKmh(lastPointRef.current, lastPointTimeRef.current, newCoord, timestamp);
+      segmentSpeedKmh = calcSegmentSpeedKmh(
+  lastPointRef.current,
+  lastPointTimeRef.current,
+  newCoord,
+  timestamp
+);
 
-      setCurrentSpeedKmh(segmentSpeedKmh);
+// Prefer the phone/OS-provided live speed.
+// Fallback to GPS segment speed if device speed is unavailable.
+finalSpeedKmh = deviceSpeedKmh ?? segmentSpeedKmh;
 
-      if (segmentSpeedKmh > maxSpeedRef.current) {
-        maxSpeedRef.current = segmentSpeedKmh;
-        setMaxSpeedKmh(segmentSpeedKmh);
-      }
+setCurrentSpeedKmh(finalSpeedKmh);
+
+if (finalSpeedKmh > maxSpeedRef.current) {
+  maxSpeedRef.current = finalSpeedKmh;
+  setMaxSpeedKmh(finalSpeedKmh);
+}
 
       // Penalty accumulation: record time and distance above the threshold
-      if (segmentSpeedKmh > SPEED.NORMAL_MAX_KMH) {
+      if (finalSpeedKmh > SPEED.DISCARD_KMH) {
         const elapsedSecs          = (timestamp - lastPointTimeRef.current) / 1000;
         overspeedSecsRef.current  += elapsedSecs;
         overspeedDistRef.current  += segmentKm;
@@ -296,8 +309,8 @@ export default function RunScreen() {
       const watcher = await Location.watchPositionAsync(
         {
           accuracy:         Location.Accuracy.BestForNavigation,
-          timeInterval:     2000,
-          distanceInterval: 3,
+          timeInterval:     1000,
+          distanceInterval: 1,
         },
         onNewLocation
       );

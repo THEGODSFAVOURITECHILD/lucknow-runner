@@ -11,7 +11,7 @@ export const CONFIG = {
   // After Railway deploy: replace with your Railway URL
   API_URL: __DEV__
     ? 'http://192.168.1.X:3000'
-    : 'https://YOUR_APP_NAME.up.railway.app',
+    : 'https://lucknow-runner.up.railway.app',
 
   // ── Google Sign-In ──────────────────────────────────────────────────────────
   // From Firebase Console → Project Settings → Your Apps → Web App → Client ID

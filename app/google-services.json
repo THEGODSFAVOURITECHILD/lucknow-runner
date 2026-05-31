@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1025084112546",
+    "project_id": "sektorrun-79a08",
+    "storage_bucket": "sektorrun-79a08.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1025084112546:android:ecd770be88fc0aa21fa1fb",
+        "android_client_info": {
+          "package_name": "com.sektorrun.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYnyAotE_-U2jvQPE2E3Whhx9VFLR5cR8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

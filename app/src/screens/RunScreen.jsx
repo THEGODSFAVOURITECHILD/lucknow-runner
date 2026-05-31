@@ -405,10 +405,10 @@ export default function RunScreen() {
 
         {path.length > 1 && (
           <Polyline
-            coordinates={path}
-            strokeColor={captureReady ? COLORS.NEON_GREEN : '#00BFFF'}
-            strokeWidth={5}
-          />
+  coordinates={path}
+  strokeColor={COLORS.NEON_GREEN}
+  strokeWidth={5}
+/>
         )}
 
         {path.length > 0 && (
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   centerBtn: {
     position: 'absolute',
     right: SPACING.LG,
-    bottom: 300,
+    bottom: 394,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -597,16 +597,18 @@ const styles = StyleSheet.create({
     marginTop: -3,
   },
   panel: {
-    position: 'absolute',
-    bottom: 0,
-    width,
-    backgroundColor: 'rgba(10,10,10,0.96)',
-    borderTopColor: COLORS.BORDER,
-    borderTopWidth: 1,
-    paddingHorizontal: SPACING.LG,
-    paddingTop: SPACING.LG,
-    paddingBottom: 34,
-  },
+  position: 'absolute',
+  bottom: 96,
+  width,
+  backgroundColor: 'rgba(10,10,10,0.96)',
+  borderColor: COLORS.BORDER,
+  borderWidth: 1,
+  borderRadius: RADIUS.LG,
+  paddingHorizontal: SPACING.LG,
+  paddingTop: SPACING.LG,
+  paddingBottom: 22,
+  marginHorizontal: 0,
+},
   statsRow: {
     flexDirection: 'row',
     gap: SPACING.SM,

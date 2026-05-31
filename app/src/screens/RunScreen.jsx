@@ -7,7 +7,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
-import MapView, { Polyline, Marker } from 'react-native-maps';
+import MapView, { Polyline, Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 
 import { COLORS, FONTS, SPACING, RADIUS } from '../constants/colors';
@@ -22,9 +22,10 @@ const LUCKNOW_REGION = {
 };
 
 const MIN_CAPTURE_DISTANCE_KM = 1.0;
+const MIN_CAPTURE_AREA_SQM = 250;
 const LOOP_CLOSE_DISTANCE_METERS = 35;
 const MAX_ACCEPTABLE_ACCURACY = 35;
-const MAX_REASONABLE_SPEED_MPS = 10; // 36 km/h, filters bike/car-like jumps
+const MAX_REASONABLE_SPEED_MPS = 10;
 
 function toRad(value) {
   return (value * Math.PI) / 180;
@@ -49,6 +50,40 @@ function distanceMeters(a, b) {
   return R * c;
 }
 
+function calculatePathDistanceKm(points) {
+  if (points.length < 2) return 0;
+
+  let totalMeters = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    totalMeters += distanceMeters(points[i - 1], points[i]);
+  }
+
+  return totalMeters / 1000;
+}
+
+function calculatePolygonAreaSqm(points) {
+  if (points.length < 3) return 0;
+
+  const earthRadius = 6371000;
+  let area = 0;
+
+  const closedPoints = [...points, points[0]];
+
+  for (let i = 0; i < closedPoints.length - 1; i++) {
+    const p1 = closedPoints[i];
+    const p2 = closedPoints[i + 1];
+
+    area +=
+      toRad(p2.longitude - p1.longitude) *
+      (2 + Math.sin(toRad(p1.latitude)) + Math.sin(toRad(p2.latitude)));
+  }
+
+  area = Math.abs((area * earthRadius * earthRadius) / 2);
+
+  return area;
+}
+
 function formatDuration(seconds) {
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
@@ -71,18 +106,35 @@ function formatPace(distanceKm, seconds) {
   return `${mins}:${String(secs).padStart(2, '0')}/km`;
 }
 
+function getCaptureStatus(distanceKm, areaSqm, loopClosed) {
+  if (!loopClosed) {
+    return 'Close your loop to capture territory';
+  }
+
+  if (distanceKm < MIN_CAPTURE_DISTANCE_KM) {
+    return `Minimum ${MIN_CAPTURE_DISTANCE_KM.toFixed(1)} km required`;
+  }
+
+  if (areaSqm < MIN_CAPTURE_AREA_SQM) {
+    return `Minimum ${MIN_CAPTURE_AREA_SQM} m² area required`;
+  }
+
+  return 'Territory ready to capture';
+}
+
 export default function RunScreen() {
   const mapRef = useRef(null);
   const watcherRef = useRef(null);
   const timerRef = useRef(null);
 
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [runState, setRunState] = useState('idle'); // idle, running, paused, finished
+  const [runState, setRunState] = useState('idle');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [path, setPath] = useState([]);
   const [distanceKm, setDistanceKm] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [loopClosed, setLoopClosed] = useState(false);
+  const [areaSqm, setAreaSqm] = useState(0);
 
   useEffect(() => {
     requestLocationPermission();
@@ -102,7 +154,7 @@ export default function RunScreen() {
         'SektorRun needs location permission to track your run.'
       );
       setPermissionGranted(false);
-      return;
+      return false;
     }
 
     setPermissionGranted(true);
@@ -114,18 +166,23 @@ export default function RunScreen() {
     const coord = {
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
+      timestamp: Date.now(),
+      accuracy: position.coords.accuracy,
     };
 
     setCurrentLocation(coord);
 
     mapRef.current?.animateToRegion(
       {
-        ...coord,
+        latitude: coord.latitude,
+        longitude: coord.longitude,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
       },
       800
     );
+
+    return true;
   };
 
   const startTimer = () => {
@@ -150,17 +207,95 @@ export default function RunScreen() {
     }
   };
 
-  const startRun = async () => {
-    if (!permissionGranted) {
-      await requestLocationPermission();
+  const processLocationPoint = (position) => {
+    const { latitude, longitude, accuracy } = position.coords;
+
+    if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY) {
       return;
     }
+
+    const newPoint = {
+      latitude,
+      longitude,
+      timestamp: Date.now(),
+      accuracy,
+    };
+
+    setCurrentLocation(newPoint);
+
+    setPath((prevPath) => {
+      if (prevPath.length === 0) {
+        return [newPoint];
+      }
+
+      const lastPoint = prevPath[prevPath.length - 1];
+      const segmentMeters = distanceMeters(lastPoint, newPoint);
+      const timeDiffSeconds = Math.max(
+        1,
+        (newPoint.timestamp - lastPoint.timestamp) / 1000
+      );
+
+      const speedMps = segmentMeters / timeDiffSeconds;
+
+      if (speedMps > MAX_REASONABLE_SPEED_MPS) {
+        return prevPath;
+      }
+
+      if (segmentMeters < 2) {
+        return prevPath;
+      }
+
+      const updatedPath = [...prevPath, newPoint];
+      const updatedDistanceKm = calculatePathDistanceKm(updatedPath);
+
+      setDistanceKm(updatedDistanceKm);
+
+      const startPoint = updatedPath[0];
+      const currentToStartMeters = distanceMeters(startPoint, newPoint);
+
+      const hasEnoughPoints = updatedPath.length >= 20;
+      const hasEnoughDistance = updatedDistanceKm >= MIN_CAPTURE_DISTANCE_KM;
+      const returnedToStart = currentToStartMeters <= LOOP_CLOSE_DISTANCE_METERS;
+
+      if (hasEnoughPoints && hasEnoughDistance && returnedToStart) {
+        const calculatedArea = calculatePolygonAreaSqm(updatedPath);
+
+        setLoopClosed(true);
+        setAreaSqm(calculatedArea);
+      } else {
+        setLoopClosed(false);
+        setAreaSqm(0);
+      }
+
+      mapRef.current?.animateToRegion(
+        {
+          latitude,
+          longitude,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        400
+      );
+
+      return updatedPath;
+    });
+  };
+
+  const startRun = async () => {
+    let allowed = permissionGranted;
+
+    if (!allowed) {
+      allowed = await requestLocationPermission();
+    }
+
+    if (!allowed) return;
 
     setRunState('running');
     setPath([]);
     setDistanceKm(0);
     setElapsedSeconds(0);
     setLoopClosed(false);
+    setAreaSqm(0);
 
     startTimer();
 
@@ -170,76 +305,7 @@ export default function RunScreen() {
         timeInterval: 1000,
         distanceInterval: 5,
       },
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-
-        if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY) {
-          return;
-        }
-
-        const newPoint = {
-          latitude,
-          longitude,
-          timestamp: Date.now(),
-          accuracy,
-        };
-
-        setCurrentLocation(newPoint);
-
-        setPath((prevPath) => {
-          if (prevPath.length === 0) {
-            return [newPoint];
-          }
-
-          const lastPoint = prevPath[prevPath.length - 1];
-          const segmentMeters = distanceMeters(lastPoint, newPoint);
-          const timeDiffSeconds = Math.max(
-            1,
-            (newPoint.timestamp - lastPoint.timestamp) / 1000
-          );
-
-          const speedMps = segmentMeters / timeDiffSeconds;
-
-          if (speedMps > MAX_REASONABLE_SPEED_MPS) {
-            return prevPath;
-          }
-
-          if (segmentMeters < 2) {
-            return prevPath;
-          }
-
-          const updatedPath = [...prevPath, newPoint];
-
-          setDistanceKm((prevDistance) => {
-            const updatedDistance = prevDistance + segmentMeters / 1000;
-
-            const startPoint = updatedPath[0];
-            const currentToStartMeters = distanceMeters(startPoint, newPoint);
-
-            if (
-              updatedPath.length >= 20 &&
-              updatedDistance >= MIN_CAPTURE_DISTANCE_KM &&
-              currentToStartMeters <= LOOP_CLOSE_DISTANCE_METERS
-            ) {
-              setLoopClosed(true);
-            }
-
-            return updatedDistance;
-          });
-
-          mapRef.current?.animateToRegion(
-            {
-              latitude,
-              longitude,
-              latitudeDelta: 0.008,
-              longitudeDelta: 0.008,
-            },
-            400
-          );
-
-          return updatedPath;
-        });
-      }
+      processLocationPoint
     );
   };
 
@@ -259,60 +325,7 @@ export default function RunScreen() {
         timeInterval: 1000,
         distanceInterval: 5,
       },
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-
-        if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY) {
-          return;
-        }
-
-        const newPoint = {
-          latitude,
-          longitude,
-          timestamp: Date.now(),
-          accuracy,
-        };
-
-        setCurrentLocation(newPoint);
-
-        setPath((prevPath) => {
-          if (prevPath.length === 0) return [newPoint];
-
-          const lastPoint = prevPath[prevPath.length - 1];
-          const segmentMeters = distanceMeters(lastPoint, newPoint);
-          const timeDiffSeconds = Math.max(
-            1,
-            (newPoint.timestamp - lastPoint.timestamp) / 1000
-          );
-
-          const speedMps = segmentMeters / timeDiffSeconds;
-
-          if (speedMps > MAX_REASONABLE_SPEED_MPS || segmentMeters < 2) {
-            return prevPath;
-          }
-
-          const updatedPath = [...prevPath, newPoint];
-
-          setDistanceKm((prevDistance) => {
-            const updatedDistance = prevDistance + segmentMeters / 1000;
-
-            const startPoint = updatedPath[0];
-            const currentToStartMeters = distanceMeters(startPoint, newPoint);
-
-            if (
-              updatedPath.length >= 20 &&
-              updatedDistance >= MIN_CAPTURE_DISTANCE_KM &&
-              currentToStartMeters <= LOOP_CLOSE_DISTANCE_METERS
-            ) {
-              setLoopClosed(true);
-            }
-
-            return updatedDistance;
-          });
-
-          return updatedPath;
-        });
-      }
+      processLocationPoint
     );
   };
 
@@ -321,17 +334,12 @@ export default function RunScreen() {
     stopTimer();
     setRunState('finished');
 
-    if (loopClosed) {
-      Alert.alert(
-        'Territory Loop Detected',
-        'You closed a loop. Territory capture submission will be connected in the next stage.'
-      );
-    } else {
-      Alert.alert(
-        'Run Finished',
-        'Run saved locally for testing. Territory capture needs a closed loop of at least 1 km.'
-      );
-    }
+    const captureStatus = getCaptureStatus(distanceKm, areaSqm, loopClosed);
+
+    Alert.alert(
+      loopClosed ? 'Run Finished' : 'Run Finished',
+      `${captureStatus}\n\nDistance: ${distanceKm.toFixed(2)} km\nArea: ${Math.round(areaSqm)} m²`
+    );
   };
 
   const resetRun = () => {
@@ -343,6 +351,7 @@ export default function RunScreen() {
     setDistanceKm(0);
     setElapsedSeconds(0);
     setLoopClosed(false);
+    setAreaSqm(0);
   };
 
   const centerOnMe = () => {
@@ -360,25 +369,44 @@ export default function RunScreen() {
   };
 
   const pace = formatPace(distanceKm, elapsedSeconds);
+  const captureStatus = getCaptureStatus(distanceKm, areaSqm, loopClosed);
+  const captureReady =
+    loopClosed &&
+    distanceKm >= MIN_CAPTURE_DISTANCE_KM &&
+    areaSqm >= MIN_CAPTURE_AREA_SQM;
 
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={styles.map}
-        initialRegion={currentLocation ? {
-          ...currentLocation,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        } : LUCKNOW_REGION}
+        initialRegion={
+          currentLocation
+            ? {
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }
+            : LUCKNOW_REGION
+        }
         showsUserLocation={permissionGranted}
         showsMyLocationButton={false}
         userInterfaceStyle="dark"
       >
+        {captureReady && path.length > 2 && (
+          <Polygon
+            coordinates={path}
+            strokeColor={COLORS.NEON_GREEN}
+            strokeWidth={3}
+            fillColor="rgba(0,255,136,0.22)"
+          />
+        )}
+
         {path.length > 1 && (
           <Polyline
             coordinates={path}
-            strokeColor={COLORS.NEON_GREEN}
+            strokeColor={captureReady ? COLORS.NEON_GREEN : '#00BFFF'}
             strokeWidth={5}
           />
         )}
@@ -391,7 +419,7 @@ export default function RunScreen() {
           <Marker
             coordinate={path[path.length - 1]}
             title="Loop Closed"
-            description="Territory capture ready"
+            description="Territory preview ready"
             pinColor="orange"
           />
         )}
@@ -409,10 +437,20 @@ export default function RunScreen() {
         </Text>
       </View>
 
-      {loopClosed && (
-        <View style={styles.loopBanner}>
-          <Text style={styles.loopTitle}>Territory loop detected</Text>
-          <Text style={styles.loopText}>Minimum 1 km loop closed.</Text>
+      {(loopClosed || captureReady) && (
+        <View
+          style={[
+            styles.loopBanner,
+            captureReady ? styles.loopReadyBanner : null,
+          ]}
+        >
+          <Text style={styles.loopTitle}>
+            {captureReady ? 'Territory Ready' : 'Loop Detected'}
+          </Text>
+          <Text style={styles.loopText}>{captureStatus}</Text>
+          <Text style={styles.loopText}>
+            Area: {Math.round(areaSqm)} m²
+          </Text>
         </View>
       )}
 
@@ -436,6 +474,21 @@ export default function RunScreen() {
             <Text style={styles.statValue}>{pace}</Text>
             <Text style={styles.statLabel}>PACE</Text>
           </View>
+        </View>
+
+        <View style={styles.captureBox}>
+          <Text style={styles.captureLabel}>CAPTURE STATUS</Text>
+          <Text
+            style={[
+              styles.captureText,
+              captureReady ? styles.captureTextReady : null,
+            ]}
+          >
+            {captureStatus}
+          </Text>
+          <Text style={styles.captureSubText}>
+            Distance required: 1.00 km • Area required: 250 m²
+          </Text>
         </View>
 
         {runState === 'idle' && (
@@ -512,6 +565,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.MD,
     padding: SPACING.MD,
   },
+  loopReadyBanner: {
+    backgroundColor: 'rgba(0,255,136,0.92)',
+  },
   loopTitle: {
     color: '#111',
     fontWeight: '800',
@@ -525,7 +581,7 @@ const styles = StyleSheet.create({
   centerBtn: {
     position: 'absolute',
     right: SPACING.LG,
-    bottom: 230,
+    bottom: 300,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -554,7 +610,7 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: SPACING.SM,
-    marginBottom: SPACING.LG,
+    marginBottom: SPACING.MD,
   },
   statBox: {
     flex: 1,
@@ -575,6 +631,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     letterSpacing: 1,
+  },
+  captureBox: {
+    backgroundColor: COLORS.BG_CARD,
+    borderRadius: RADIUS.MD,
+    borderColor: COLORS.BORDER,
+    borderWidth: 1,
+    padding: SPACING.MD,
+    marginBottom: SPACING.MD,
+  },
+  captureLabel: {
+    color: COLORS.TEXT_MUTED,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  captureText: {
+    color: COLORS.TEXT_SECONDARY,
+    fontSize: FONTS.SIZES.SM,
+    fontWeight: '700',
+  },
+  captureTextReady: {
+    color: COLORS.NEON_GREEN,
+  },
+  captureSubText: {
+    color: COLORS.TEXT_MUTED,
+    fontSize: 11,
+    marginTop: 4,
   },
   startBtn: {
     backgroundColor: COLORS.NEON_GREEN,

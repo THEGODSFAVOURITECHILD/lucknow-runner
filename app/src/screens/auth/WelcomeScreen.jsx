@@ -1,98 +1,75 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/colors';
-import { CONFIG } from '../../constants/config';
-import { authAPI } from '../../api/index';
-import useAuthStore from '../../store/authStore';
 
-// Configure Google Sign-In once when this module loads
-GoogleSignin.configure({
-  webClientId: CONFIG.GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: false,
-});
+import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/colors';
+// import { CONFIG } from '../../constants/config';
+// import { authAPI } from '../../api/index';
+import useAuthStore from '../../store/authStore';
 
 export default function WelcomeScreen({ navigation }) {
   const { login } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    try {
-      // Check Google Play Services is available (Android)
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+ const handleGoogleSignIn = async () => {
+  setLoading(true);
 
-      // Open Google account picker
-      await GoogleSignin.signIn();
-      const { idToken } = await GoogleSignin.getTokens();
-
-      if (!idToken) throw new Error('No ID token from Google');
-
-      // Send to our backend for verification
-      const response = await authAPI.googleLogin(idToken);
-
-      if (response.needsUsername) {
-        // New user — needs to pick a username
-        navigation.navigate('Username', {
-          email:    response.email,
-          name:     response.name,
-          picture:  response.picture,
-          googleId: response.googleId,
-        });
-      } else {
-        // Returning user — log in directly
-        await login(response.token, response.user);
-      }
-
-    } catch (error) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // User closed the picker — do nothing
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        // Sign-in already in progress — do nothing
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        Alert.alert('Error', 'Google Play Services is required. Please update it and try again.');
-      } else {
-        console.error('[GoogleSignIn]', error);
-        Alert.alert('Sign-in Failed', 'Could not connect to Google. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    await login('dev-test-token', {
+      id: 'dev-user-1',
+      username: 'test_runner',
+      nickname: 'Test Runner',
+      email: 'test@sektorrun.dev',
+      profilePhoto: null,
+    });
+  } catch (error) {
+    console.error('[DevLogin]', error);
+    Alert.alert('Error', 'Temporary dev login failed.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <View style={styles.container}>
 
-      {/* ── Logo area ──────────────────────────────────────────────────────── */}
+      {/* Logo area */}
       <View style={styles.hero}>
         <Text style={styles.appName}>
           SEKTOR<Text style={styles.appNameAccent}>RUN</Text>
         </Text>
-        <Text style={styles.tagline}>Claim Lucknow.{'\n'}One run at a time.</Text>
 
-        {/* Decorative neon lines */}
+        <Text style={styles.tagline}>
+          Claim Lucknow.{'\n'}One run at a time.
+        </Text>
+
         <View style={styles.decorRow}>
           <View style={[styles.decorLine, { backgroundColor: COLORS.NEON_GREEN }]} />
-          <View style={[styles.decorDot,  { backgroundColor: COLORS.NEON_GREEN }]} />
+          <View style={[styles.decorDot, { backgroundColor: COLORS.NEON_GREEN }]} />
           <View style={[styles.decorLine, { backgroundColor: COLORS.NEON_GREEN }]} />
         </View>
       </View>
 
-      {/* ── Feature bullets ────────────────────────────────────────────────── */}
+      {/* Feature bullets */}
       <View style={styles.features}>
         {[
           '🏃  Run to capture territory',
           '🗺   Own zones across Lucknow',
           '🏆  Compete on leaderboards',
         ].map((f) => (
-          <Text key={f} style={styles.featureText}>{f}</Text>
+          <Text key={f} style={styles.featureText}>
+            {f}
+          </Text>
         ))}
       </View>
 
-      {/* ── Sign-in button ─────────────────────────────────────────────────── */}
+      {/* Sign-in button */}
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.googleBtn}

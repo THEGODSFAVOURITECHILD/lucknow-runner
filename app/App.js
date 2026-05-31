@@ -12,6 +12,7 @@ import useAuthStore from './src/store/authStore';
 
 import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import UsernameScreen from './src/screens/auth/UsernameScreen';
+import MapScreen from './src/screens/MapScreen';
 
 const PlaceholderScreen = ({ route }) => (
   <View
@@ -32,7 +33,6 @@ const PlaceholderScreen = ({ route }) => (
 );
 
 const HomeScreen = PlaceholderScreen;
-const MapScreen = PlaceholderScreen;
 const RunScreen = PlaceholderScreen;
 const LeaderboardScreen = PlaceholderScreen;
 const ProfileScreen = PlaceholderScreen;

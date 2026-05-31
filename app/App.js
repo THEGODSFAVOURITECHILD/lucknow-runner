@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Text, View } from 'react-native';
+import { Text, View, Image } from 'react-native';
 
 import { COLORS } from './src/constants/colors';
 import useAuthStore from './src/store/authStore';
@@ -38,11 +38,11 @@ const LeaderboardScreen = PlaceholderScreen;
 const ProfileScreen = PlaceholderScreen;
 
 const TAB_ICONS = {
-  Home: '🏠',
-  Map: '🗺',
-  Run: '🏃',
-  Leaderboard: '🏆',
-  Profile: '👤',
+  Home: require('./assets/tab-icons/home.png'),
+  Map: require('./assets/tab-icons/map.png'),
+  Run: require('./assets/tab-icons/run.png'),
+  Leaderboard: require('./assets/tab-icons/leaderboard.png'),
+  Profile: require('./assets/tab-icons/profile.png'),
 };
 
 const Stack = createNativeStackNavigator();
@@ -64,10 +64,16 @@ function MainTabs() {
         tabBarInactiveTintColor: COLORS.GREY_500,
         tabBarLabelStyle: { fontSize: 10, marginTop: -2 },
         tabBarIcon: ({ focused }) => (
-          <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
-            {TAB_ICONS[route.name]}
-          </Text>
-        ),
+  <Image
+    source={TAB_ICONS[route.name]}
+    style={{
+      width: focused ? 30 : 26,
+      height: focused ? 30 : 26,
+      opacity: focused ? 1 : 0.45,
+      resizeMode: 'contain',
+    }}
+  />
+),
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />

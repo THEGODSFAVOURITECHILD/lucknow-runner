@@ -15,7 +15,7 @@ export const CONFIG = {
 
   // ── Google Sign-In ──────────────────────────────────────────────────────────
   // From Firebase Console → Project Settings → Your Apps → Web App → Client ID
-  GOOGLE_WEB_CLIENT_ID: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+  GOOGLE_WEB_CLIENT_ID: '1:1025084112546:android:ecd770be88fc0aa21fa1fb.apps.googleusercontent.com',
 
   // ── Map ─────────────────────────────────────────────────────────────────────
   MAP_STYLE_URL: 'https://demotiles.maplibre.org/style.json',

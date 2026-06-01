@@ -143,10 +143,7 @@ export default function RunScreen() {
   // GPS callback — stable (no deps), reads all live values via refs
   // ─────────────────────────────────────────────────────────────────────────────
   const onNewLocation = useCallback((pos) => {
-    const { latitude, longitude, accuracy, speed } = pos.coords;
-
-const deviceSpeedKmh =
-  typeof speed === 'number' && speed >= 0 ? speed * 3.6 : null;
+    const { latitude, longitude, accuracy, speed: deviceSpeedMs } = pos.coords;
     const timestamp = pos.timestamp || Date.now();
     const newCoord  = { latitude, longitude };
 
@@ -159,47 +156,60 @@ const deviceSpeedKmh =
     // Discard GPS fixes with poor accuracy
     if (accuracy && accuracy > 35) return;
 
-    // ── Speed and distance ────────────────────────────────────────────────────
-    let segmentKm      = 0;
-    let segmentSpeedKmh = 0;
-let finalSpeedKmh = deviceSpeedKmh ?? 0;
+    // ── Speed ─────────────────────────────────────────────────────────────────
+    // PRIMARY: hardware speed from the GPS chip.
+    // Available from the very first fix — no previous point required.
+    // iOS and Android both report this in metres per second; multiply by 3.6 for km/h.
+    const deviceSpeedKmh =
+      deviceSpeedMs != null && deviceSpeedMs >= 0
+        ? deviceSpeedMs * 3.6
+        : null;
+
+    // FALLBACK: if the chip doesn't report speed, calculate it from the GPS segment.
+    let segmentKm          = 0;
+    let calculatedSpeedKmh = 0;
 
     if (lastPointRef.current && lastPointTimeRef.current) {
-      segmentKm       = haversineKm(lastPointRef.current.latitude, lastPointRef.current.longitude, latitude, longitude);
-      segmentSpeedKmh = calcSegmentSpeedKmh(
-  lastPointRef.current,
-  lastPointTimeRef.current,
-  newCoord,
-  timestamp
-);
+      segmentKm          = haversineKm(
+        lastPointRef.current.latitude, lastPointRef.current.longitude,
+        latitude, longitude
+      );
+      calculatedSpeedKmh = calcSegmentSpeedKmh(
+        lastPointRef.current, lastPointTimeRef.current,
+        newCoord, timestamp
+      );
+    }
 
-// Prefer the phone/OS-provided live speed.
-// Fallback to GPS segment speed if device speed is unavailable.
-finalSpeedKmh = deviceSpeedKmh ?? segmentSpeedKmh;
+    // Prefer device speed; fall back to calculated only when unavailable.
+    const effectiveSpeedKmh =
+      deviceSpeedKmh !== null ? deviceSpeedKmh : calculatedSpeedKmh;
 
-setCurrentSpeedKmh(finalSpeedKmh);
+    // Update UI on every fix — no second point needed
+    setCurrentSpeedKmh(effectiveSpeedKmh);
+    if (effectiveSpeedKmh > maxSpeedRef.current) {
+      maxSpeedRef.current = effectiveSpeedKmh;
+      setMaxSpeedKmh(effectiveSpeedKmh);
+    }
 
-if (finalSpeedKmh > maxSpeedRef.current) {
-  maxSpeedRef.current = finalSpeedKmh;
-  setMaxSpeedKmh(finalSpeedKmh);
-}
+    // Overspeed penalty — only accumulate when we have a real segment
+    if (
+      effectiveSpeedKmh > SPEED.NORMAL_MAX_KMH &&
+      lastPointRef.current &&
+      lastPointTimeRef.current
+    ) {
+      const elapsedSecs          = (timestamp - lastPointTimeRef.current) / 1000;
+      overspeedSecsRef.current  += elapsedSecs;
+      overspeedDistRef.current  += segmentKm;
+      setOverspeedSeconds(overspeedSecsRef.current);
+      setOverspeedDistanceKm(overspeedDistRef.current);
+      setHasSpeedWarning(true);
+    }
 
-      // Penalty accumulation: record time and distance above the threshold
-      if (finalSpeedKmh > SPEED.DISCARD_KMH) {
-        const elapsedSecs          = (timestamp - lastPointTimeRef.current) / 1000;
-        overspeedSecsRef.current  += elapsedSecs;
-        overspeedDistRef.current  += segmentKm;
-        setOverspeedSeconds(overspeedSecsRef.current);
-        setOverspeedDistanceKm(overspeedDistRef.current);
-        setHasSpeedWarning(true);
-      }
-
-      // Discard GPS teleport — point is dropped, run continues
-      if (segmentSpeedKmh > SPEED.DISCARD_KMH) {
-        lastPointRef.current     = newCoord;
-        lastPointTimeRef.current = timestamp;
-        return;
-      }
+    // Discard GPS teleport — skip this point, keep the run alive
+    if (effectiveSpeedKmh > SPEED.DISCARD_KMH) {
+      lastPointRef.current     = newCoord;
+      lastPointTimeRef.current = timestamp;
+      return;
     }
 
     // ── Append to path ────────────────────────────────────────────────────────
@@ -309,8 +319,8 @@ if (finalSpeedKmh > maxSpeedRef.current) {
       const watcher = await Location.watchPositionAsync(
         {
           accuracy:         Location.Accuracy.BestForNavigation,
-          timeInterval:     1000,
-          distanceInterval: 1,
+          timeInterval:     1000,   // every 1 s instead of 2 s
+          distanceInterval: 1,      // every 1 m instead of 3 m
         },
         onNewLocation
       );
